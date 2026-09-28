@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: qurated-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qurated
+      POSTGRES_PASSWORD: qurated_dev_password
+      POSTGRES_DB: qurated_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

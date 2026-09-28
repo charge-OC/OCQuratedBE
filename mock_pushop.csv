@@ -1,0 +1,9 @@
+artikel_nr,omschrijving,schroefdraad_maat,lengte_mm,materiaal,oppervlaktebehandeling,sterkteklasse,prijs_excl,voorraad
+"ART-001","Zeskantbout DIN 933","M8","20","RVS A2","","","15.50","1200"
+" ART-002 "," Zeskantbout met schacht ","M10","40"," staal","thermisch verzinkt","8.8","35.00","500"
+"ART-003","Sluitring DIN 125A","M6","","rvs A4","","","2.10","10000"
+"ART-004","Zeskantmoer "," M8 ","","Staal"," verzinkt ","8","5.00","2500"
+"ART-005","Cilinderkopschroef binnenzeskant","M12","60","staal","Zwart gepassiveerd","12.9","85.20","100"
+"ART-006","Houtfretten","8mm","80","RVS A2","","","22.00","800"
+"ART-007","Borgmoer DIN 985","M10","","Staal","","8","12.00","-10"
+"","Zeskantbout","M8","20","Staal","","8.8","10.00","100"

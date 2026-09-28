@@ -1,24 +1,39 @@
-const express = require('express');
-const { Pool } = require('pg');
-const cors = require('cors');
-require('dotenv').config();
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import OpenAI from 'openai';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { parseCsvFile } from './src/ingest-csv.js';
+import { pool } from './src/db/index.js';
+import sourceRoutes from './src/routes/sources.js';
+import { startCronWorker } from './src/workers/cron.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config();
+
+// Purpose: Boots up the Qurated API server and gets everything ready.
+// Pseudocode: 
+// 1. Set up Express and basic tools like CORS and JSON parsing.
+// 2. Hook up our source and extraction routes.
+// 3. Connect to the database.
+// 4. Start the background cron worker to listen for scheduled jobs.
+// 5. Start listening for incoming web requests on the specified port.
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Database connection pool using environment variables
-const pool = new Pool({
-    user: process.env.DB_USER || 'postgres',
-    host: process.env.DB_HOST || 'localhost',
-    database: process.env.DB_NAME || 'qurated',
-    password: process.env.DB_PASSWORD || 'password',
-    port: parseInt(process.env.DB_PORT || '5432', 10),
+const client = new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: process.env.OPENROUTER_API_KEY,
 });
 
 app.use(cors());
 app.use(express.json());
 
-// Basic health check endpoint
+// Routes
+app.use('/api/sources', sourceRoutes);
+
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
@@ -27,10 +42,8 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Mock lineage contract for Raven's split-screen UI
 app.get('/api/lineage/:documentId', (req, res) => {
     const { documentId } = req.params;
-
     res.json({
         document_id: documentId,
         lineage_chain: [
@@ -41,12 +54,7 @@ app.get('/api/lineage/:documentId', (req, res) => {
                 field: 'finish',
                 raw_value: 'hot dip galv.',
                 confidence_score: 0.89,
-                bounding_box: {
-                    x: 120,
-                    y: 340,
-                    width: 85,
-                    height: 22,
-                },
+                bounding_box: { x: 120, y: 340, width: 85, height: 22 },
                 prompt_version: 'v1.0.4',
                 timestamp: new Date().toISOString(),
             },
@@ -54,6 +62,46 @@ app.get('/api/lineage/:documentId', (req, res) => {
     });
 });
 
-app.listen(port, () => {
+app.post('/api/extract', async (req, res) => {
+    try {
+        const completion = await client.chat.completions.create({
+            model: process.env.DEFAULT_MODEL || "google/gemini-flash-1.5",
+            messages: [
+                { role: "system", content: "You are a helpful assistant." },
+                { role: "user", content: "Return a bounding box [ymin, xmin, ymax, xmax] on a 0-1000 scale." }
+            ],
+        });
+
+        res.json({
+            status: 'success',
+            message: 'Endpoint ready for AI extraction logic via OpenRouter.',
+            mock_response: completion.choices[0].message.content
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/ingest-csv', async (req, res) => {
+    try {
+        const filePath = req.body?.filePath
+            ? path.resolve(__dirname, req.body.filePath)
+            : path.join(__dirname, 'mock_pushop.csv');
+
+        const summary = await parseCsvFile(filePath);
+        res.status(200).json(summary);
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.listen(port, async () => {
+    try {
+        const res = await pool.query('SELECT NOW()');
+        console.log(`Database connected successfully at ${res.rows[0].now}`);
+        startCronWorker();
+    } catch (err) {
+        console.error('Database connection failed:', err);
+    }
     console.log(`Server running on port ${port}`);
 });
