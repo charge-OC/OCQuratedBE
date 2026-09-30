@@ -14,7 +14,8 @@ import sax from 'sax';
 export async function streamHvhXml(sourceTarget, onProduct) {
     let stream;
 
-    // Figure out if we are grabbing this from the web or a local file on the computer.    if (sourceTarget && (sourceTarget.startsWith('http://') || sourceTarget.startsWith('https://'))) {
+    // Figure out if we are grabbing this from the web or a local file on the computer. 
+    if (sourceTarget && (sourceTarget.startsWith('http://') || sourceTarget.startsWith('https://'))) {
         const response = await fetch(sourceTarget);
         if (!response.ok) {
             throw new Error(`Failed to fetch XML stream from ${sourceTarget}: HTTP ${response.status}`);

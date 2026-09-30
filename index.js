@@ -8,6 +8,8 @@ import { parseCsvFile } from './src/ingest-csv.js';
 import { pool } from './src/db/index.js';
 import sourceRoutes from './src/routes/sources.js';
 import { startCronWorker } from './src/workers/cron.js';
+import swaggerUi from 'swagger-ui-express';
+import { swaggerDocument } from './src/swagger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +32,9 @@ const client = new OpenAI({
 
 app.use(cors());
 app.use(express.json());
+
+// Expose Swagger UI
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Routes
 app.use('/api/sources', sourceRoutes);
