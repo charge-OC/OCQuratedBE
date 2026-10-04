@@ -8,23 +8,25 @@ import sax from 'sax';
 // 2. Open a read stream.
 // 3. Set up the SAX XML parser to read chunk-by-chunk so we don't blow up memory.
 // 4. Look for <product> tags, grab all the text fields, and fire the 'onProduct' callback for each.
-// Inputs: sourceTarget (string URL or path), onProduct (callback function).
+// Inputs: streamOrTarget (Readable stream, string URL, or path), onProduct (callback function).
 // Outputs: A promise that resolves with the total processed count.
 // Edge cases: Handles missing files, broken URLs, and gracefully pauses the stream during async callbacks.
-export async function streamHvhXml(sourceTarget, onProduct) {
+export async function streamHvhXml(streamOrTarget, onProduct) {
     let stream;
 
-    // Figure out if we are grabbing this from the web or a local file on the computer. 
-    if (sourceTarget && (sourceTarget.startsWith('http://') || sourceTarget.startsWith('https://'))) {
-        const response = await fetch(sourceTarget);
+    // Figure out if we are grabbing this from the web, a local file, or if it's already a stream. 
+    if (streamOrTarget && typeof streamOrTarget.pipe === 'function') {
+        stream = streamOrTarget;
+    } else if (typeof streamOrTarget === 'string' && (streamOrTarget.startsWith('http://') || streamOrTarget.startsWith('https://'))) {
+        const response = await fetch(streamOrTarget);
         if (!response.ok) {
-            throw new Error(`Failed to fetch XML stream from ${sourceTarget}: HTTP ${response.status}`);
+            throw new Error(`Failed to fetch XML stream from ${streamOrTarget}: HTTP ${response.status}`);
         }
         stream = Readable.fromWeb(response.body);
-    } else if (sourceTarget && fs.existsSync(sourceTarget)) {
-        stream = fs.createReadStream(sourceTarget, { encoding: 'utf8' });
+    } else if (typeof streamOrTarget === 'string' && fs.existsSync(streamOrTarget)) {
+        stream = fs.createReadStream(streamOrTarget, { encoding: 'utf8' });
     } else {
-        throw new Error(`File or URL target not accessible: ${sourceTarget}`);
+        throw new Error(`File or URL target not accessible: ${streamOrTarget}`);
     }
 
     return new Promise((resolve, reject) => {

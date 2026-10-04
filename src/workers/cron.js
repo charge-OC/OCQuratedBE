@@ -1,5 +1,6 @@
 import { pool } from '../db/index.js';
 import { streamHvhXml } from '../adapters/hvhAdapter.js';
+import { fetchSourceStream } from '../adapters/fetcherFactory.js';
 
 // Purpose: Automatically kicks off data syncs for sources that are on a schedule.
 // Pseudocode: 
@@ -68,10 +69,11 @@ export function startCronWorker() {
                         let failedRows = 0;
 
                         try {
-                            const targetUrl = source.connection_config?.url;
+                            // Use our factory to get the remote stream
+                            const stream = await fetchSourceStream(source, runId);
 
-                            // We pass a callback to the XML streamer to count up the records as they come in.
-                            await streamHvhXml(targetUrl, (record) => {
+                            // We pass the stream to the XML parser
+                            await streamHvhXml(stream, (record) => {
                                 totalRows++;
                                 if (record && !record.is_flagged) {
                                     validRows++;

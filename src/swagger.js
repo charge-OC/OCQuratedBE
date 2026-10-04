@@ -103,6 +103,37 @@ export const swaggerDocument = {
           200: { description: 'Source details' },
         },
       },
+      put: {
+        summary: 'Update a specific source',
+        tags: ['Sources'],
+        parameters: [
+          { $ref: '#/components/parameters/MerchantIdHeader' },
+          { in: 'path', name: 'id', required: true, schema: { type: 'string', format: 'uuid' } },
+        ],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  type: { type: 'string' },
+                  default_model_id: { type: 'string' },
+                  connection_config: { type: 'object' },
+                  schedule_cron: { type: 'string', nullable: true },
+                  status: { type: 'string', enum: ['ACTIVE', 'PAUSED', 'ARCHIVED'] },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          200: { description: 'Source updated successfully' },
+          400: { description: 'Validation error' },
+          404: { description: 'Source not found' },
+        },
+      },
       delete: {
         summary: 'Delete a specific source',
         tags: ['Sources'],

@@ -8,4 +8,6 @@ export const sourceCreateSchema = z.object({
     schedule_cron: z.string().nullable().optional(),
 });
 
-export const sourceUpdateSchema = sourceCreateSchema.partial();
+export const sourceUpdateSchema = sourceCreateSchema.partial().extend({
+    status: z.enum(['ACTIVE', 'PAUSED', 'ARCHIVED']).optional()
+});

@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { pool } from '../db/index.js';
-import { sourceCreateSchema } from '../schemas/sourceSchema.js';
+import { sourceCreateSchema, sourceUpdateSchema } from '../schemas/sourceSchema.js';
 import { streamHvhXml } from '../adapters/hvhAdapter.js';
+import { fetchSourceStream } from '../adapters/fetcherFactory.js';
 
 const router = Router();
 
@@ -18,10 +19,22 @@ router.use((req, res, next) => {
 // Pseudocode: Runs a simple SQL query to grab everything from the sources table for the current merchant.
 router.get('/', async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM sources WHERE merchant_id = $1 ORDER BY created_at DESC',
-            [req.merchantId]
-        );
+        const statusFilter = req.query.status;
+        let result;
+        
+        // If a status is explicitly requested, filter by it.
+        // Otherwise, return everything that is NOT archived.
+        if (statusFilter) {
+            result = await pool.query(
+                'SELECT * FROM sources WHERE merchant_id = $1 AND status = $2 ORDER BY created_at DESC',
+                [req.merchantId, statusFilter.toUpperCase()]
+            );
+        } else {
+            result = await pool.query(
+                "SELECT * FROM sources WHERE merchant_id = $1 AND status != 'ARCHIVED' ORDER BY created_at DESC",
+                [req.merchantId]
+            );
+        }
         res.json({ sources: result.rows });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -171,9 +184,11 @@ router.post('/:id/sync', async (req, res) => {
             let failedRows = 0;
 
             try {
-                const targetUrl = source.connection_config?.url;
+                // Dynamically fetch the stream using the fetcher factory
+                const stream = await fetchSourceStream(source, runId);
 
-                await streamHvhXml(targetUrl, (record) => {
+                // Pass the obtained stream to the XML parser
+                await streamHvhXml(stream, (record) => {
                     totalRows++;
                     if (record && !record.is_flagged) {
                         validRows++;
@@ -207,6 +222,67 @@ router.post('/:id/sync', async (req, res) => {
             }
         })();
 
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Purpose: Update an existing data source's configuration or status.
+// Pseudocode: 
+// 1. Check if the source exists and belongs to the merchant.
+// 2. Validate the incoming data against the update schema.
+// 3. Build a dynamic SQL query for only the fields provided.
+// 4. Update the row and return the updated data.
+router.put('/:id', async (req, res) => {
+    const parsed = sourceUpdateSchema.safeParse(req.body);
+    if (!parsed.success) {
+        return res.status(400).json({ errors: parsed.error.flatten() });
+    }
+
+    try {
+        const checkResult = await pool.query(
+            'SELECT * FROM sources WHERE id = $1 AND merchant_id = $2',
+            [req.params.id, req.merchantId]
+        );
+
+        if (checkResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Source not found' });
+        }
+
+        const updates = parsed.data;
+        if (Object.keys(updates).length === 0) {
+            return res.json(checkResult.rows[0]); // Nothing to update
+        }
+
+        let queryParams = [];
+        let setStatements = [];
+        let paramIndex = 1;
+
+        for (const [key, value] of Object.entries(updates)) {
+            setStatements.push(`${key} = $${paramIndex}`);
+            queryParams.push(value);
+            paramIndex++;
+        }
+
+        // Handle archiving specifically
+        if (updates.status === 'ARCHIVED') {
+            setStatements.push(`archived_at = NOW()`);
+        }
+
+        queryParams.push(req.params.id);
+        queryParams.push(req.merchantId);
+        const idIndex = paramIndex;
+        const merchantIndex = paramIndex + 1;
+
+        const updateQuery = `
+            UPDATE sources 
+            SET ${setStatements.join(', ')}
+            WHERE id = $${idIndex} AND merchant_id = $${merchantIndex}
+            RETURNING *
+        `;
+
+        const updateResult = await pool.query(updateQuery, queryParams);
+        res.json(updateResult.rows[0]);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
