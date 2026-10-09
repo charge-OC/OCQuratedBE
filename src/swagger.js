@@ -17,7 +17,7 @@ export const swaggerDocument = {
         in: 'header',
         name: 'x-merchant-id',
         required: true,
-        schema: { type: 'string', default: 'default-merchant' },
+        schema: { type: 'string', format: 'uuid', default: '00000000-0000-0000-0000-000000000001' },
         description: 'Tenant isolation identifier',
       },
     },
@@ -82,6 +82,14 @@ export const swaggerDocument = {
                   connection_config: { type: 'object', properties: { url: { type: 'string', example: 'sample-feed.xml' } } },
                   schedule_cron: { type: 'string', example: '0 2 * * *' },
                 },
+                example: {
+                  name: 'HVH Local Sample Feed',
+                  type: 'csv',
+                  default_model_id: 'google/gemini-flash-1.5',
+                  connection_config: { url: 'https://example.com/feed.csv' },
+                  schedule_cron: '0 2 * * *',
+                  status: 'ACTIVE'
+                }
               },
             },
           },
@@ -118,12 +126,20 @@ export const swaggerDocument = {
                 type: 'object',
                 properties: {
                   name: { type: 'string' },
-                  type: { type: 'string' },
+                  type: { type: 'string', enum: ['csv', 'xml', 'api'] },
                   default_model_id: { type: 'string' },
                   connection_config: { type: 'object' },
                   schedule_cron: { type: 'string', nullable: true },
                   status: { type: 'string', enum: ['ACTIVE', 'PAUSED', 'ARCHIVED'] },
                 },
+                example: {
+                  name: 'Updated HVH Feed',
+                  type: 'xml',
+                  default_model_id: 'google/gemini-flash-1.5',
+                  connection_config: { url: 'https://example.com/feed.xml' },
+                  schedule_cron: '0 2 * * *',
+                  status: 'ACTIVE'
+                }
               },
             },
           },

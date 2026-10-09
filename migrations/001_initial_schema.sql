@@ -1,6 +1,6 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
-CREATE TABLE sources (
+CREATE TABLE IF NOT EXISTS sources (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     merchant_id UUID NOT NULL,
     name VARCHAR(255) NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE sources (
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE TABLE ingestion_runs (
+CREATE TABLE IF NOT EXISTS ingestion_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id UUID REFERENCES sources(id) ON DELETE CASCADE,
     merchant_id UUID NOT NULL,
@@ -31,7 +31,7 @@ CREATE TABLE ingestion_runs (
     error_message TEXT
 );
 
-CREATE TABLE flagged_records (
+CREATE TABLE IF NOT EXISTS flagged_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id UUID REFERENCES ingestion_runs(id) ON DELETE CASCADE,
     row_index INT NOT NULL,

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { pool } from '../db/index.js';
 import { sourceCreateSchema, sourceUpdateSchema } from '../schemas/sourceSchema.js';
 import { streamHvhXml } from '../adapters/hvhAdapter.js';
+import { ingestCsvStream } from '../services/csvParser.js';
 import { fetchSourceStream } from '../adapters/fetcherFactory.js';
 
 const router = Router();
@@ -10,7 +11,7 @@ const router = Router();
 // Pseudocode: Checks the 'x-merchant-id' header and attaches it to the request so we can use it later.
 // Edge cases: If the header is missing, it falls back to a default (useful for local dev).
 router.use((req, res, next) => {
-    const merchantId = req.headers['x-merchant-id'] || 'default-merchant';
+    const merchantId = req.headers['x-merchant-id'] || '00000000-0000-0000-0000-000000000001';
     req.merchantId = merchantId;
     next();
 });
@@ -35,7 +36,20 @@ router.get('/', async (req, res) => {
                 [req.merchantId]
             );
         }
-        res.json({ sources: result.rows });
+
+        // Scenario 5: Sensitive Credential Masking
+        const maskedSources = result.rows.map(source => {
+            if (source.connection_config) {
+                const config = { ...source.connection_config };
+                if (config.password) config.password = '********';
+                if (config.api_key) config.api_key = '********';
+                if (config.token) config.token = '********';
+                return { ...source, connection_config: config };
+            }
+            return source;
+        });
+
+        res.json({ sources: maskedSources });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -96,7 +110,15 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Source not found' });
         }
 
-        res.json(result.rows[0]);
+        // Scenario 5: Sensitive Credential Masking
+        const source = result.rows[0];
+        if (source.connection_config) {
+            if (source.connection_config.password) source.connection_config.password = '********';
+            if (source.connection_config.api_key) source.connection_config.api_key = '********';
+            if (source.connection_config.token) source.connection_config.token = '********';
+        }
+
+        res.json(source);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -187,15 +209,23 @@ router.post('/:id/sync', async (req, res) => {
                 // Dynamically fetch the stream using the fetcher factory
                 const stream = await fetchSourceStream(source, runId);
 
-                // Pass the obtained stream to the XML parser
-                await streamHvhXml(stream, (record) => {
-                    totalRows++;
-                    if (record && !record.is_flagged) {
-                        validRows++;
-                    } else {
-                        failedRows++;
-                    }
-                });
+                // Use the correct parser based on source type
+                if (source.type.toLowerCase() === 'csv') {
+                    const stats = await ingestCsvStream(stream, source, req.merchantId, runId);
+                    totalRows = stats.totalRows;
+                    validRows = stats.validRows;
+                    failedRows = stats.failedRows;
+                } else {
+                    // Default fallback to XML stream for testing/legacy
+                    await streamHvhXml(stream, (record) => {
+                        totalRows++;
+                        if (record && !record.is_flagged) {
+                            validRows++;
+                        } else {
+                            failedRows++;
+                        }
+                    });
+                }
 
                 await pool.query(
                     `UPDATE ingestion_runs 
@@ -288,12 +318,13 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// Purpose: Delete a source from the database.
-// Pseudocode: Tries to delete the row where the ID and merchant ID match. Returns 404 if it couldn't find it.
+// Purpose: Soft Delete a source from the database.
+// Pseudocode: Updates the status to ARCHIVED where the ID and merchant ID match. Returns 404 if it couldn't find it.
 router.delete('/:id', async (req, res) => {
     try {
+        // Scenario 6: Soft Delete & Run History Retention
         const result = await pool.query(
-            'DELETE FROM sources WHERE id = $1 AND merchant_id = $2 RETURNING id',
+            "UPDATE sources SET status = 'ARCHIVED', archived_at = NOW() WHERE id = $1 AND merchant_id = $2 RETURNING id",
             [req.params.id, req.merchantId]
         );
 

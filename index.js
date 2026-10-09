@@ -104,6 +104,16 @@ app.listen(port, async () => {
     try {
         const res = await pool.query('SELECT NOW()');
         console.log(`Database connected successfully at ${res.rows[0].now}`);
+
+        // Scenario 4: Server Restart & Zombie Lock Recovery
+        // Release any locks held by runs that were interrupted by a restart
+        const recoveryRes = await pool.query(
+            "UPDATE ingestion_runs SET status = 'FAILED', error_message = 'Terminated unexpectedly due to server restart', finished_at = NOW() WHERE status = 'PROCESSING' RETURNING id"
+        );
+        if (recoveryRes.rowCount > 0) {
+            console.log(`Recovered ${recoveryRes.rowCount} zombie locks for interrupted runs.`);
+        }
+
         startCronWorker();
     } catch (err) {
         console.error('Database connection failed:', err);

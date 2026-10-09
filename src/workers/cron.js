@@ -1,6 +1,8 @@
 import { pool } from '../db/index.js';
 import { streamHvhXml } from '../adapters/hvhAdapter.js';
+import { ingestCsvStream } from '../services/csvParser.js';
 import { fetchSourceStream } from '../adapters/fetcherFactory.js';
+import parser from 'cron-parser';
 
 // Purpose: Automatically kicks off data syncs for sources that are on a schedule.
 // Pseudocode: 
@@ -36,6 +38,23 @@ export function startCronWorker() {
             // Loop through each source we found.
             for (const source of sourcesResult.rows) {
                 try {
+                    // Scenario 3: Cron Scheduler Idempotency
+                    // Verify if it's ACTUALLY due according to its cron schedule
+                    try {
+                        const interval = parser.parseExpression(source.schedule_cron);
+                        const prevRunDue = interval.prev().toDate();
+                        const lastRun = source.last_run_at ? new Date(source.last_run_at) : new Date(0);
+                        
+                        // If the most recent cron trigger time is strictly BEFORE OR EQUAL TO the last run time, 
+                        // it means we've already ran the job for this interval. Skip it.
+                        if (prevRunDue <= lastRun) {
+                            continue;
+                        }
+                    } catch (cronErr) {
+                        console.error(`Invalid cron schedule for source ${source.id}:`, cronErr);
+                        continue;
+                    }
+
                     // CONCURRENCY LOCK: Let's check if this specific source is already busy running a sync.
                     const activeRun = await pool.query(
                         "SELECT id FROM ingestion_runs WHERE source_id = $1 AND status = 'PROCESSING'",
@@ -72,15 +91,23 @@ export function startCronWorker() {
                             // Use our factory to get the remote stream
                             const stream = await fetchSourceStream(source, runId);
 
-                            // We pass the stream to the XML parser
-                            await streamHvhXml(stream, (record) => {
-                                totalRows++;
-                                if (record && !record.is_flagged) {
-                                    validRows++;
-                                } else {
-                                    failedRows++;
-                                }
-                            });
+                            // Use the correct parser based on source type
+                            if (source.type && source.type.toLowerCase() === 'csv') {
+                                const stats = await ingestCsvStream(stream, source, source.merchant_id, runId);
+                                totalRows = stats.totalRows;
+                                validRows = stats.validRows;
+                                failedRows = stats.failedRows;
+                            } else {
+                                // We pass the stream to the XML parser
+                                await streamHvhXml(stream, (record) => {
+                                    totalRows++;
+                                    if (record && !record.is_flagged) {
+                                        validRows++;
+                                    } else {
+                                        failedRows++;
+                                    }
+                                });
+                            }
 
                             // We finished successfully! Update the run record to show it's done.
                             await pool.query(

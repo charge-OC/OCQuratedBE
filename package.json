@@ -4,8 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "db:migrate": "node src/db/migrate.js"
+    "test": "node --test tests/*.test.js",
+    "db:migrate": "node src/db/migrate.js",
+    "security:scan": "aikido scan",
+    "security:gate": "aikido scan --gate"
   },
   "keywords": [],
   "author": "",
@@ -14,9 +16,12 @@
   "dependencies": {
     "basic-ftp": "^6.2.2",
     "cors": "^2.8.6",
+    "cron-parser": "^5.10.2",
     "csv-parse": "^7.0.2",
+    "csv-parser": "^3.2.1",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "iconv-lite": "^0.7.3",
     "openai": "^7.15.0",
     "pg": "^8.23.0",
     "sax": "^1.6.1",

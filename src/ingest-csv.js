@@ -3,25 +3,36 @@ import { parse } from 'csv-parse';
 import { z } from 'zod';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { normalizePrice } from './services/csvParser.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Zod Schema Definition
+// Zod Schema Definition: This schema validates the shape and data types of each
+// parsed row from the CSV. Using Zod guarantees we don't accidentally ingest corrupted
+// or improperly formatted product data into the database.
 const ProductSchema = z.object({
-  sku: z.string().trim().min(1, "SKU is required"),
-  name: z.string().trim().min(1, "Name is required"),
-  threadSize: z.string().trim().nullable().transform(v => v === "" ? null : v),
-  lengthMm: z.number().nullable(),
-  material: z.string().trim().transform(v => v.toUpperCase()),
-  finish: z.string().trim().nullable().transform(v => v === "" ? null : v),
-  grade: z.string().trim().nullable().transform(v => v === "" ? null : v),
-  priceExcl: z.number().positive("Price must be positive"),
-  stock: z.number().int().nonnegative("Stock must be non-negative")
+  sku: z.string().trim().min(1, "SKU is required"), // SKU must be non-empty
+  name: z.string().trim().min(1, "Name is required"), // Product name must be non-empty
+  threadSize: z.string().trim().nullable().transform(v => v === "" ? null : v), // Convert empty strings to NULL
+  lengthMm: z.number().nullable(), // Allow nulls for products without length
+  material: z.string().trim().transform(v => v.toUpperCase()), // Normalize materials to UPPERCASE
+  finish: z.string().trim().nullable().transform(v => v === "" ? null : v), // Convert empty strings to NULL
+  grade: z.string().trim().nullable().transform(v => v === "" ? null : v), // Convert empty strings to NULL
+  priceExcl: z.number().positive("Price must be positive"), // Ensure pricing logic is sound
+  stock: z.number().int().nonnegative("Stock must be non-negative") // Ensure stock doesn't go below 0
 });
 
+/**
+ * Parses a given CSV file, maps its columns from Dutch to English camelCase,
+ * and validates each row against a strict Zod schema.
+ * 
+ * @param {string} targetPath - The absolute file path to the CSV file to parse.
+ * @returns {Promise<Object>} A summary object containing the valid and flagged records.
+ */
 export const parseCsvFile = (targetPath) => {
   return new Promise((resolve, reject) => {
+    // Arrays to collect valid output and records that failed validation
     const validProducts = [];
     const flaggedRecords = [];
     let totalRowsProcessed = 0;
@@ -35,7 +46,8 @@ export const parseCsvFile = (targetPath) => {
       .on('data', (row) => {
         totalRowsProcessed++;
 
-        // Map raw Dutch merchant headers to camelCase
+        // Map raw Dutch merchant headers to English camelCase property names
+        // Also apply very basic type coersion (parseInt/parseFloat) before hitting Zod
         const mappedRecord = {
           sku: row.artikel_nr,
           name: row.omschrijving,
@@ -44,16 +56,19 @@ export const parseCsvFile = (targetPath) => {
           material: row.materiaal || "",
           finish: row.oppervlaktebehandeling || null,
           grade: row.sterkteklasse || null,
-          priceExcl: row.prijs_excl ? parseFloat(row.prijs_excl) : -1,
-          stock: row.voorraad ? parseInt(row.voorraad, 10) : -1
+          // Use normalizePrice to handle European decimal formats properly
+          priceExcl: row.prijs_excl ? normalizePrice(row.prijs_excl) : -1, // Use -1 to purposely fail Zod validation if missing
+          stock: row.voorraad ? parseInt(row.voorraad, 10) : -1 // Use -1 to purposely fail Zod validation if missing
         };
 
-        // Validate against Zod schema
+        // Validate the mapped object against our Zod schema
         const result = ProductSchema.safeParse(mappedRecord);
 
         if (result.success) {
+          // If the data passes validation, push to the valid output array
           validProducts.push(result.data);
         } else {
+          // If the data fails validation, record the raw row and exact errors for debugging/reporting
           flaggedRecords.push({
             rowNumber: totalRowsProcessed,
             rawRecord: row,
@@ -62,6 +77,7 @@ export const parseCsvFile = (targetPath) => {
         }
       })
       .on('end', () => {
+        // Once the file stream completes, resolve the promise with the final batch summary
         resolve({
           totalRowsProcessed,
           validRecordsCount: validProducts.length,
