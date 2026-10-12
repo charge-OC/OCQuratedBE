@@ -3,7 +3,8 @@ import { parse } from 'csv-parse';
 import { z } from 'zod';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { normalizePrice } from './services/csvParser.js';
+import iconv from 'iconv-lite';
+import { normalizePrice } from './services/normalizer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,20 +29,26 @@ const ProductSchema = z.object({
  * and validates each row against a strict Zod schema.
  * 
  * @param {string} targetPath - The absolute file path to the CSV file to parse.
+ * @param {Object} [options] - Stream configuration options (encoding, delimiter)
  * @returns {Promise<Object>} A summary object containing the valid and flagged records.
  */
-export const parseCsvFile = (targetPath) => {
+export const parseCsvFile = (targetPath, options = {}) => {
   return new Promise((resolve, reject) => {
+    const encoding = options.encoding || 'utf-8';
+    const delimiter = options.delimiter || ',';
+
     // Arrays to collect valid output and records that failed validation
     const validProducts = [];
     const flaggedRecords = [];
     let totalRowsProcessed = 0;
 
     fs.createReadStream(targetPath)
+      .pipe(iconv.decodeStream(encoding))
       .pipe(parse({
         columns: true,
         skip_empty_lines: true,
-        trim: true
+        trim: true,
+        delimiter: delimiter
       }))
       .on('data', (row) => {
         totalRowsProcessed++;
