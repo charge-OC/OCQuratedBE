@@ -1,15 +1,12 @@
 import { PassThrough } from 'stream';
+import { validateSafeUrl } from '../utils/urlValidator.js';
 
-/**
- * Downloads a file via HTTP/HTTPS and returns it as a readable stream.
- * Protects against downloading HTML error pages instead of valid CSV data.
- *
- * @param {Object} connectionConfig - HTTP connection details
- * @param {string} connectionConfig.url - URL of the file to download
- * @returns {Promise<PassThrough>} A readable stream of the downloaded file
- */
+// this is the fetch: downloading the remote supplier stream
 export async function downloadHttpStream(connectionConfig) {
-  // Setup an AbortController to enforce a 15-second timeout on the request
+  // this will make sure its safe: blocking local files and private IPs
+  validateSafeUrl(connectionConfig?.url);
+
+  // setup an abort controller to enforce a 15-second timeout on the request
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 15000);
 

@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { resolveProtocol, fetchSourceStream } from '../src/adapters/fetcherFactory.js';
-import { Readable } from 'stream';
 
 describe('Fetcher Factory Protocol Routing (Milestone B1 Fixes)', () => {
   describe('resolveProtocol()', () => {

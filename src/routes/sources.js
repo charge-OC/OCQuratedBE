@@ -4,8 +4,12 @@ import { sourceCreateSchema, sourceUpdateSchema } from '../schemas/sourceSchema.
 import { streamHvhXml } from '../adapters/hvhAdapter.js';
 import { ingestCsvStream } from '../services/csvParser.js';
 import { fetchSourceStream } from '../adapters/fetcherFactory.js';
+import { authenticateApi } from '../middleware/auth.js';
 
 const router = Router();
+
+// this will make sure its safe: protecting /api/sources routes with authentication
+router.use(authenticateApi);
 
 // Reusable helper to redact sensitive credentials from source objects
 export function maskSourceCredentials(source) {
@@ -132,14 +136,15 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ errors: parsed.error.flatten() });
     }
 
-    const { name, type, default_model_id, connection_config, schedule_cron } = parsed.data;
+    // this is what sander asked: keeping format and protocol strictly separate
+    const { name, type, protocol, default_model_id, connection_config, dialect_config, schedule_cron } = parsed.data;
 
     try {
         const result = await pool.query(
-            `INSERT INTO sources (merchant_id, name, type, default_model_id, connection_config, schedule_cron)
-             VALUES ($1, $2, $3, $4, $5, $6)
+            `INSERT INTO sources (merchant_id, name, type, protocol, default_model_id, connection_config, dialect_config, schedule_cron)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              RETURNING *`,
-            [req.merchantId, name, type, default_model_id, connection_config, schedule_cron || null]
+            [req.merchantId, name, type, protocol, default_model_id, connection_config, dialect_config, schedule_cron || null]
         );
 
         res.status(201).json(maskSourceCredentials(result.rows[0]));

@@ -1,19 +1,17 @@
 import * as ftp from 'basic-ftp';
 import { PassThrough } from 'stream';
+import { isPrivateOrLocalHost, validateSafeUrl } from '../utils/urlValidator.js';
 
-/**
- * Connects to an FTP server and downloads a file as a readable stream.
- *
- * @param {Object} connectionConfig - FTP credentials and file path
- * @param {string} connectionConfig.host - FTP server hostname
- * @param {string} connectionConfig.user - FTP username
- * @param {string} connectionConfig.password - FTP password
- * @param {number} connectionConfig.port - FTP port (default: 21)
- * @param {boolean} connectionConfig.secure - Use FTPS (default: false)
- * @param {string} connectionConfig.remotePath - Path to the remote file to download
- * @returns {Promise<PassThrough>} A readable stream of the downloaded file
- */
+// this is the fetch: downloading from a remote ftp server
 export async function downloadFtpStream(connectionConfig) {
+  // this will make sure its safe: blocking local files and private IPs
+  if (connectionConfig?.url) {
+    validateSafeUrl(connectionConfig.url);
+  }
+  if (connectionConfig?.host && isPrivateOrLocalHost(connectionConfig.host)) {
+    throw new Error(`Access to private or local host '${connectionConfig.host}' is blocked for security.`);
+  }
+
   // Create a new FTP client instance
   const client = new ftp.Client();
   

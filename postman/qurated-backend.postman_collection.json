@@ -12,6 +12,11 @@
       "type": "string"
     },
     {
+      "key": "apiKey",
+      "value": "qurated_dev_api_key_2026",
+      "type": "string"
+    },
+    {
       "key": "merchantId",
       "value": "00000000-0000-0000-0000-000000000001",
       "type": "string"
@@ -28,6 +33,11 @@
       "request": {
         "method": "GET",
         "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
+            "type": "text"
+          },
           {
             "key": "x-merchant-id",
             "value": "{{merchantId}}",
@@ -68,6 +78,11 @@
             "type": "text"
           },
           {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
+            "type": "text"
+          },
+          {
             "key": "x-merchant-id",
             "value": "{{merchantId}}",
             "type": "text"
@@ -75,7 +90,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"name\": \"European Hardware Supplier CSV Feed\",\n  \"type\": \"csv\",\n  \"default_model_id\": \"google/gemini-flash-1.5\",\n  \"connection_config\": {\n    \"url\": \"https://raw.githubusercontent.com/datasets/gdp/master/data/gdp.csv\",\n    \"encoding\": \"windows-1252\",\n    \"delimiter\": \";\",\n    \"password\": \"supplier_secure_pass\"\n  },\n  \"schedule_cron\": \"0 2 * * *\"\n}"
+          "raw": "{\n  \"name\": \"European Hardware Supplier CSV Feed\",\n  \"type\": \"csv\",\n  \"protocol\": \"HTTP\",\n  \"default_model_id\": \"google/gemini-flash-1.5\",\n  \"connection_config\": {\n    \"url\": \"https://raw.githubusercontent.com/datasets/gdp/master/data/gdp.csv\",\n    \"encoding\": \"windows-1252\",\n    \"delimiter\": \";\",\n    \"password\": \"supplier_secure_pass\"\n  },\n  \"schedule_cron\": \"0 2 * * *\"\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/api/sources",
@@ -91,6 +106,11 @@
       "request": {
         "method": "GET",
         "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
+            "type": "text"
+          },
           {
             "key": "x-merchant-id",
             "value": "{{merchantId}}",
@@ -114,6 +134,11 @@
           {
             "key": "Content-Type",
             "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
             "type": "text"
           },
           {
@@ -141,6 +166,11 @@
         "method": "POST",
         "header": [
           {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
+            "type": "text"
+          },
+          {
             "key": "x-merchant-id",
             "value": "{{merchantId}}",
             "type": "text"
@@ -161,6 +191,11 @@
         "method": "GET",
         "header": [
           {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
+            "type": "text"
+          },
+          {
             "key": "x-merchant-id",
             "value": "{{merchantId}}",
             "type": "text"
@@ -180,6 +215,11 @@
       "request": {
         "method": "DELETE",
         "header": [
+          {
+            "key": "x-api-key",
+            "value": "{{apiKey}}",
+            "type": "text"
+          },
           {
             "key": "x-merchant-id",
             "value": "{{merchantId}}",

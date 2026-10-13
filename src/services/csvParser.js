@@ -33,8 +33,8 @@ export async function detectDelimiter(stream, encoding = 'utf-8') {
       try {
         stream.pause();
         stream.unshift(chunk);
-      } catch (err) {
-        // In case unshift fails on certain custom stream implementations
+      } catch {
+        // in case unshift fails on certain custom stream implementations
       }
 
       try {
@@ -52,7 +52,7 @@ export async function detectDelimiter(stream, encoding = 'utf-8') {
         } else {
           resolve(',');
         }
-      } catch (err) {
+      } catch {
         resolve(',');
       }
     };
@@ -240,7 +240,7 @@ export async function ingestCsvStream(stream, source, merchantId, runId) {
         });
       }
 
-      // Chunked Batch Inserts: flush whenever batch reaches 500
+      // saving in batches of 500 so memory stays low
       if (cleanBatch.length >= BATCH_SIZE) {
         await flushCleanBatch();
       }

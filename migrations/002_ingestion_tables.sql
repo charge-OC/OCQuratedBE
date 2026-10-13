@@ -1,16 +1,12 @@
--- migrations/002_ingestion_tables.sql
+-- Up Migration
+-- this is what sander asked: never dropping tables so we never lose data
 
--- Drop existing tables to recreate with the requested B1.3 schema
-DROP TABLE IF EXISTS normalized_records CASCADE;
-DROP TABLE IF EXISTS flagged_records CASCADE;
-DROP TABLE IF EXISTS ingestion_runs CASCADE;
-
--- 1. ingestion_runs
-CREATE TABLE ingestion_runs (
+-- 1. ingestion_runs table and indexes
+CREATE TABLE IF NOT EXISTS ingestion_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     source_id UUID NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
     merchant_id UUID NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSING', -- 'PROCESSING', 'COMPLETED', 'FAILED'
+    status VARCHAR(20) NOT NULL DEFAULT 'PROCESSING',
     started_at TIMESTAMPTZ DEFAULT NOW(),
     finished_at TIMESTAMPTZ,
     total_rows INT DEFAULT 0,
@@ -23,22 +19,22 @@ CREATE INDEX IF NOT EXISTS idx_ingestion_runs_source_id ON ingestion_runs(source
 CREATE INDEX IF NOT EXISTS idx_ingestion_runs_merchant_id ON ingestion_runs(merchant_id);
 CREATE INDEX IF NOT EXISTS idx_ingestion_runs_status ON ingestion_runs(status);
 
--- 2. flagged_records
-CREATE TABLE flagged_records (
+-- 2. flagged_records table and indexes
+CREATE TABLE IF NOT EXISTS flagged_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id UUID NOT NULL REFERENCES ingestion_runs(id) ON DELETE CASCADE,
     merchant_id UUID NOT NULL,
     row_index INT NOT NULL,
     raw_row JSONB NOT NULL,
-    error_reasons JSONB NOT NULL, -- Array of string reasons or JSONB
+    error_reasons JSONB NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_flagged_records_run_id ON flagged_records(run_id);
 CREATE INDEX IF NOT EXISTS idx_flagged_records_merchant_id ON flagged_records(merchant_id);
 
--- 3. normalized_records
-CREATE TABLE normalized_records (
+-- 3. normalized_records table and indexes
+CREATE TABLE IF NOT EXISTS normalized_records (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     run_id UUID NOT NULL REFERENCES ingestion_runs(id) ON DELETE CASCADE,
     merchant_id UUID NOT NULL,
@@ -57,3 +53,6 @@ CREATE INDEX IF NOT EXISTS idx_normalized_records_run_id ON normalized_records(r
 CREATE INDEX IF NOT EXISTS idx_normalized_records_merchant_id ON normalized_records(merchant_id);
 CREATE INDEX IF NOT EXISTS idx_normalized_records_sku ON normalized_records(sku);
 
+-- Down Migration
+-- this removes the normalized records table on rollback
+DROP TABLE IF EXISTS normalized_records;

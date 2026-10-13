@@ -33,8 +33,13 @@ const client = new OpenAI({
 app.use(cors());
 app.use(express.json());
 
+import { authenticateApi } from './src/middleware/auth.js';
+
 // Expose Swagger UI
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+
+// this will make sure its safe: protecting all /api/* routes
+app.use('/api', authenticateApi);
 
 // Routes
 app.use('/api/sources', sourceRoutes);
