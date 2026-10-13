@@ -201,7 +201,11 @@ export async function ingestCsvStream(stream, source, merchantId, runId) {
 
   try {
     const decoder = iconv.decodeStream(encoding);
-    const parser = csv({ separator: delimiter, skipLines: skipRows });
+    const parser = csv({
+      separator: delimiter,
+      skipLines: skipRows,
+      mapHeaders: ({ header }) => (typeof header === 'string' ? header.trim() : header)
+    });
 
     // Propagate upstream stream errors down to parser
     stream.on('error', (err) => parser.destroy(err));

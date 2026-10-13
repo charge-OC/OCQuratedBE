@@ -25,6 +25,7 @@ describe('CSV Streaming Ingestion Integration Tests (Milestone B1.3)', () => {
     if (testSourceId) {
       await pool.query('DELETE FROM sources WHERE id = $1', [testSourceId]);
     }
+    await pool.end();
   });
 
   it('should process a 1,200-row CSV fixture in chunks of 500 and verify metric balance', async () => {
@@ -212,5 +213,29 @@ describe('CSV Streaming Ingestion Integration Tests (Milestone B1.3)', () => {
     assert.strictEqual(failedRun.rows.length, 1);
     assert.strictEqual(failedRun.rows[0].status, 'FAILED');
     assert.ok(failedRun.rows[0].error_message.includes('Simulated upstream network abort'));
+  });
+
+  it('should trim header column whitespace and properly parse row fields', async () => {
+    const content = '  sku  ,  name  ,  price  \nSKU-TRIM,Trimmed Item,29.99\n';
+    const stream = Readable.from([content]);
+
+    const result = await ingestCsvStream(
+      stream,
+      { id: testSourceId, connection_config: { encoding: 'utf-8', delimiter: ',' } },
+      merchantId
+    );
+
+    assert.strictEqual(result.totalRows, 1);
+    assert.strictEqual(result.validRows, 1);
+    assert.strictEqual(result.failedRows, 0);
+
+    const norm = await pool.query(
+      'SELECT * FROM normalized_records WHERE run_id = $1',
+      [result.runId]
+    );
+    assert.strictEqual(norm.rows.length, 1);
+    assert.strictEqual(norm.rows[0].sku, 'SKU-TRIM');
+    assert.strictEqual(norm.rows[0].name, 'Trimmed Item');
+    assert.strictEqual(parseFloat(norm.rows[0].price), 29.99);
   });
 });

@@ -122,19 +122,17 @@ export function startCronWorker() {
                             );
                         } catch (bgError) {
                             // Uh oh, something broke during the sync. Mark it as failed so we can check it later.
+                            // Retain partial counts recorded by the parser instead of resetting them to 0
                             await pool.query(
                                 `UPDATE ingestion_runs 
                                  SET status = 'FAILED',
-                                     total_rows = $1,
-                                     valid_rows = $2,
-                                     failed_rows = $3,
-                                     error_message = $4,
+                                     error_message = $1,
                                      finished_at = NOW()
-                                 WHERE id = $5`,
-                                [totalRows, validRows, failedRows, bgError.message, runId]
+                                 WHERE id = $2`,
+                                [bgError.message, runId]
                             );
                         }
-                    })();
+                    })().catch(err => console.error(`Background cron sync failure for source ${source.id}:`, err));
 
                 } catch (err) {
                     console.error(`Error processing source ${source.id}:`, err);

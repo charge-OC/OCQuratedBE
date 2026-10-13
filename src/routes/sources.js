@@ -7,6 +7,19 @@ import { fetchSourceStream } from '../adapters/fetcherFactory.js';
 
 const router = Router();
 
+// Reusable helper to redact sensitive credentials from source objects
+export function maskSourceCredentials(source) {
+    if (!source) return source;
+    if (source.connection_config && typeof source.connection_config === 'object') {
+        const config = { ...source.connection_config };
+        if (config.password) config.password = '********';
+        if (config.api_key) config.api_key = '********';
+        if (config.token) config.token = '********';
+        return { ...source, connection_config: config };
+    }
+    return source;
+}
+
 // Purpose: Protects all the routes below by figuring out which merchant is making the request.
 // Pseudocode: Checks the 'x-merchant-id' header and attaches it to the request so we can use it later.
 // Edge cases: If the header is missing, it falls back to a default (useful for local dev).
@@ -38,16 +51,7 @@ router.get('/', async (req, res) => {
         }
 
         // Scenario 5: Sensitive Credential Masking
-        const maskedSources = result.rows.map(source => {
-            if (source.connection_config) {
-                const config = { ...source.connection_config };
-                if (config.password) config.password = '********';
-                if (config.api_key) config.api_key = '********';
-                if (config.token) config.token = '********';
-                return { ...source, connection_config: config };
-            }
-            return source;
-        });
+        const maskedSources = result.rows.map(maskSourceCredentials);
 
         res.json({ sources: maskedSources });
     } catch (error) {
@@ -111,14 +115,7 @@ router.get('/:id', async (req, res) => {
         }
 
         // Scenario 5: Sensitive Credential Masking
-        const source = result.rows[0];
-        if (source.connection_config) {
-            if (source.connection_config.password) source.connection_config.password = '********';
-            if (source.connection_config.api_key) source.connection_config.api_key = '********';
-            if (source.connection_config.token) source.connection_config.token = '********';
-        }
-
-        res.json(source);
+        res.json(maskSourceCredentials(result.rows[0]));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -145,7 +142,7 @@ router.post('/', async (req, res) => {
             [req.merchantId, name, type, default_model_id, connection_config, schedule_cron || null]
         );
 
-        res.status(201).json(result.rows[0]);
+        res.status(201).json(maskSourceCredentials(result.rows[0]));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -210,7 +207,7 @@ router.post('/:id/sync', async (req, res) => {
                 const stream = await fetchSourceStream(source, runId);
 
                 // Use the correct parser based on source type
-                if (source.type.toLowerCase() === 'csv') {
+                if (source.type && source.type.toLowerCase() === 'csv') {
                     const stats = await ingestCsvStream(stream, source, req.merchantId, runId);
                     totalRows = stats.totalRows;
                     validRows = stats.validRows;
@@ -238,19 +235,17 @@ router.post('/:id/sync', async (req, res) => {
                     [totalRows, validRows, failedRows, runId, req.merchantId]
                 );
             } catch (bgError) {
+                // Retain partial counts recorded by the parser instead of resetting them to 0
                 await pool.query(
                     `UPDATE ingestion_runs 
                      SET status = 'FAILED',
-                         total_rows = $1,
-                         valid_rows = $2,
-                         failed_rows = $3,
-                         error_message = $4,
+                         error_message = $1,
                          finished_at = NOW()
-                     WHERE id = $5 AND merchant_id = $6`,
-                    [totalRows, validRows, failedRows, bgError.message, runId, req.merchantId]
+                     WHERE id = $2 AND merchant_id = $3`,
+                    [bgError.message, runId, req.merchantId]
                 );
             }
-        })();
+        })().catch(err => console.error('Background sync failure for source', source.id, err));
 
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -312,7 +307,7 @@ router.put('/:id', async (req, res) => {
         `;
 
         const updateResult = await pool.query(updateQuery, queryParams);
-        res.json(updateResult.rows[0]);
+        res.json(maskSourceCredentials(updateResult.rows[0]));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

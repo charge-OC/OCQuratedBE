@@ -1,0 +1,213 @@
+{
+  "info": {
+    "_postman_id": "c1f7b920-56ef-468b-a45e-d98c5208b001",
+    "name": "Qurated Backend API - Milestone B1",
+    "description": "Comprehensive Postman collection for Qurated Supplier Ingestion, Source Management, and Pipeline Synchronization API.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "merchantId",
+      "value": "00000000-0000-0000-0000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "sourceId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. List All Sources",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/sources",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources"]
+        },
+        "description": "Retrieves all active and paused sources for the authenticated merchant."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Create CSV Source",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();",
+              "if (response && response.id) {",
+              "    pm.collectionVariables.set('sourceId', response.id);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"European Hardware Supplier CSV Feed\",\n  \"type\": \"csv\",\n  \"default_model_id\": \"google/gemini-flash-1.5\",\n  \"connection_config\": {\n    \"url\": \"https://raw.githubusercontent.com/datasets/gdp/master/data/gdp.csv\",\n    \"encoding\": \"windows-1252\",\n    \"delimiter\": \";\",\n    \"password\": \"supplier_secure_pass\"\n  },\n  \"schedule_cron\": \"0 2 * * *\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/sources",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources"]
+        },
+        "description": "Creates a new supplier data source with custom connection config and cron schedule."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Get Source Details",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/sources/{{sourceId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources", "{{sourceId}}"]
+        },
+        "description": "Fetches details of a specific source with sensitive connection credentials masked."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Update Source",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"European Hardware Supplier CSV Feed (Updated)\",\n  \"status\": \"ACTIVE\",\n  \"connection_config\": {\n    \"url\": \"https://example.com/updated_feed.csv\",\n    \"encoding\": \"utf-8\",\n    \"delimiter\": \",\"\n  },\n  \"schedule_cron\": \"*/30 * * * *\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/sources/{{sourceId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources", "{{sourceId}}"]
+        },
+        "description": "Updates an existing data source's name, schedule, or configuration."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Trigger Manual Ingestion Sync",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/sources/{{sourceId}}/sync",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources", "{{sourceId}}", "sync"]
+        },
+        "description": "Immediately triggers an on-demand synchronization run for the specified source (HTTP 202 Accepted)."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Get Source Ingestion History",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/sources/{{sourceId}}/runs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources", "{{sourceId}}", "runs"]
+        },
+        "description": "Fetches all historical and active ingestion runs for the source."
+      },
+      "response": []
+    },
+    {
+      "name": "7. Soft Delete Source",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "x-merchant-id",
+            "value": "{{merchantId}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/sources/{{sourceId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "sources", "{{sourceId}}"]
+        },
+        "description": "Performs a clean soft-delete (status = ARCHIVED) keeping ingestion run history intact."
+      },
+      "response": []
+    },
+    {
+      "name": "8. Swagger UI Documentation",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api-docs",
+          "host": ["{{baseUrl}}"],
+          "path": ["api-docs"]
+        },
+        "description": "Inspects the interactive OpenAPI/Swagger specification."
+      },
+      "response": []
+    }
+  ]
+}
