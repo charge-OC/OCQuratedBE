@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { pool } from '../db/index.js';
 import { sourceCreateSchema, sourceUpdateSchema } from '../schemas/sourceSchema.js';
 import { streamHvhXml } from '../adapters/hvhAdapter.js';
@@ -11,25 +12,50 @@ const router = Router();
 // this will make sure its safe: protecting /api/sources routes with authentication
 router.use(authenticateApi);
 
-// Reusable helper to redact sensitive credentials from source objects
+// this will make sure its safe: redacting secret keys and passwords from source responses
 export function maskSourceCredentials(source) {
-    if (!source) return source;
-    if (source.connection_config && typeof source.connection_config === 'object') {
-        const config = { ...source.connection_config };
-        if (config.password) config.password = '********';
-        if (config.api_key) config.api_key = '********';
-        if (config.token) config.token = '********';
-        return { ...source, connection_config: config };
+    if (!source || typeof source !== 'object') return source;
+
+    const masked = { ...source };
+    const sensitiveKeys = ['password', 'api_key', 'apiKey', 'token', 'secret', 'client_secret', 'access_token'];
+
+    // redacting top-level secret fields if present
+    for (const key of sensitiveKeys) {
+        if (masked[key]) {
+            masked[key] = '********';
+        }
     }
-    return source;
+
+    // redacting nested connection_config secrets
+    if (masked.connection_config && typeof masked.connection_config === 'object') {
+        const config = { ...masked.connection_config };
+        for (const key of sensitiveKeys) {
+            if (config[key]) {
+                config[key] = '********';
+            }
+        }
+        masked.connection_config = config;
+    }
+
+    return masked;
 }
 
-// Purpose: Protects all the routes below by figuring out which merchant is making the request.
-// Pseudocode: Checks the 'x-merchant-id' header and attaches it to the request so we can use it later.
-// Edge cases: If the header is missing, it falls back to a default (useful for local dev).
+// standard UUID regex pattern matching 8-4-4-4-12 hex format
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const merchantIdSchema = z.string().regex(UUID_REGEX, 'Must be a valid UUID');
+
+// this will make sure its safe: strictly validating x-merchant-id as a valid UUID
 router.use((req, res, next) => {
-    const merchantId = req.headers['x-merchant-id'] || '00000000-0000-0000-0000-000000000001';
-    req.merchantId = merchantId;
+    const rawMerchantId = req.headers['x-merchant-id'];
+    const parseResult = merchantIdSchema.safeParse(rawMerchantId);
+
+    if (!parseResult.success) {
+        return res.status(400).json({
+            error: 'Invalid or missing x-merchant-id header. Must be a valid UUID.'
+        });
+    }
+
+    req.merchantId = parseResult.data;
     next();
 });
 
@@ -76,7 +102,7 @@ router.get('/runs/:runId', async (req, res) => {
             return res.status(404).json({ error: 'Run not found' });
         }
 
-        res.json(result.rows[0]);
+        res.json(maskSourceCredentials(result.rows[0]));
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -99,7 +125,7 @@ router.get('/:id/runs', async (req, res) => {
              ORDER BY started_at DESC`,
             [req.params.id, req.merchantId]
         );
-        res.json({ runs: result.rows });
+        res.json({ runs: result.rows.map(maskSourceCredentials) });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
@@ -281,7 +307,7 @@ router.put('/:id', async (req, res) => {
 
         const updates = parsed.data;
         if (Object.keys(updates).length === 0) {
-            return res.json(checkResult.rows[0]); // Nothing to update
+            return res.json(maskSourceCredentials(checkResult.rows[0])); // Nothing to update
         }
 
         let queryParams = [];

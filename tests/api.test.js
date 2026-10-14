@@ -3,6 +3,13 @@ import assert from 'node:assert';
 import express from 'express';
 import { pool } from '../src/db/index.js';
 import sourceRouter from '../src/routes/sources.js';
+import { validateSafeUrl } from '../src/utils/urlValidator.js';
+import { sourceCreateSchema } from '../src/schemas/sourceSchema.js';
+
+// this will make sure its safe: ensuring test environment has valid dummy credentials
+process.env.API_KEY = process.env.API_KEY || 'qurated_dev_api_key_2026';
+process.env.API_AUTH_USER = process.env.API_AUTH_USER || 'admin';
+process.env.API_AUTH_PASS = process.env.API_AUTH_PASS || 'qurated_dev_password';
 
 describe('Source API Endpoints & Security (Milestone B1 Fixes)', () => {
   let app;
@@ -44,6 +51,52 @@ describe('Source API Endpoints & Security (Milestone B1 Fixes)', () => {
     assert.strictEqual(res.status, 401);
     const data = await res.json();
     assert.ok(data.error.includes('Unauthorized'));
+  });
+
+  it('GET /api/sources should fail closed with 500 if server auth is unconfigured', async () => {
+    // this will make sure its safe: fail closed when auth credentials are missing in env
+    const savedApiKey = process.env.API_KEY;
+    const savedUser = process.env.API_AUTH_USER;
+    const savedPass = process.env.API_AUTH_PASS;
+
+    try {
+      delete process.env.API_KEY;
+      delete process.env.API_AUTH_USER;
+      delete process.env.API_AUTH_PASS;
+
+      const res = await fetch(baseUrl, {
+        headers: {
+          'x-merchant-id': merchantA,
+          'x-api-key': 'any-key'
+        }
+      });
+
+      assert.strictEqual(res.status, 500);
+      const data = await res.json();
+      assert.strictEqual(data.error, 'Server authentication misconfiguration');
+    } finally {
+      process.env.API_KEY = savedApiKey;
+      process.env.API_AUTH_USER = savedUser;
+      process.env.API_AUTH_PASS = savedPass;
+    }
+  });
+
+  it('GET /api/sources should reject missing or invalid x-merchant-id header with 400 Bad Request', async () => {
+    // this will make sure its safe: rejecting missing or non-UUID merchant IDs
+    const testCases = [
+      { name: 'missing header', headers: { 'x-api-key': validApiKey } },
+      { name: 'numeric id', headers: { 'x-api-key': validApiKey, 'x-merchant-id': '1' } },
+      { name: 'arbitrary string', headers: { 'x-api-key': validApiKey, 'x-merchant-id': 'test' } },
+      { name: 'sql injection attempt', headers: { 'x-api-key': validApiKey, 'x-merchant-id': "' OR 1=1" } },
+      { name: 'short uuid', headers: { 'x-api-key': validApiKey, 'x-merchant-id': '12345' } }
+    ];
+
+    for (const tc of testCases) {
+      const res = await fetch(baseUrl, { headers: tc.headers });
+      assert.strictEqual(res.status, 400, `Expected 400 for ${tc.name}`);
+      const data = await res.json();
+      assert.strictEqual(data.error, 'Invalid or missing x-merchant-id header. Must be a valid UUID.');
+    }
   });
 
   it('POST /api/sources should reject SSRF attempts with local file or private IP URLs', async () => {
@@ -175,6 +228,23 @@ describe('Source API Endpoints & Security (Milestone B1 Fixes)', () => {
     assert.strictEqual(data.connection_config.password, '********');
   });
 
+  it('PUT /api/sources/:id with empty body should not leak cleartext credentials', async () => {
+    // this will make sure its safe: even empty updates never echo unmasked credentials
+    const res = await fetch(`${baseUrl}/${createdSourceId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-merchant-id': merchantA,
+        'x-api-key': validApiKey
+      },
+      body: JSON.stringify({})
+    });
+
+    assert.strictEqual(res.status, 200);
+    const data = await res.json();
+    assert.strictEqual(data.connection_config.password, '********');
+  });
+
   it('DELETE /api/sources/:id should perform soft delete (status ARCHIVED)', async () => {
     const res = await fetch(`${baseUrl}/${createdSourceId}`, {
       method: 'DELETE',
@@ -193,5 +263,60 @@ describe('Source API Endpoints & Security (Milestone B1 Fixes)', () => {
     assert.strictEqual(dbCheck.rows.length, 1);
     assert.strictEqual(dbCheck.rows[0].status, 'ARCHIVED');
     assert.ok(dbCheck.rows[0].archived_at !== null);
+  });
+
+  it('should validate URLs and reject all local filesystem paths and file schemes', async () => {
+    // this will make sure its safe: unit testing rejection of local paths in validator and schema
+    const invalidUrls = [
+      'file:///etc/passwd',
+      'file://C:/data/feed.csv',
+      'C:\\data\\feed.csv',
+      'c:/windows/system32/calc.exe',
+      'D:\\supplier\\catalog.csv',
+      '/etc/shadow',
+      '/var/log/messages.csv',
+      './local_feed.csv',
+      '../parent_feed.csv',
+      '.\\relative.csv',
+      '..\\relative.csv',
+      'feed.csv',
+      'javascript:alert(1)'
+    ];
+
+    for (const url of invalidUrls) {
+      // 1. validator check
+      assert.throws(
+        () => validateSafeUrl(url),
+        (err) => err instanceof Error,
+        `Expected validateSafeUrl to throw for ${url}`
+      );
+
+      // 2. schema check
+      const parseResult = sourceCreateSchema.safeParse({
+        name: 'Invalid Path Source',
+        type: 'csv',
+        connection_config: { url }
+      });
+      assert.strictEqual(parseResult.success, false, `Expected schema to reject ${url}`);
+      assert.ok(parseResult.error.flatten().fieldErrors.connection_config?.length > 0);
+    }
+  });
+
+  it('should accept valid absolute HTTP and FTP URLs in schema validation', async () => {
+    const validHttp = sourceCreateSchema.safeParse({
+      name: 'Valid HTTP Source',
+      type: 'csv',
+      protocol: 'HTTP',
+      connection_config: { url: 'https://supplier.example.com/feed.csv' }
+    });
+    assert.strictEqual(validHttp.success, true);
+
+    const validFtp = sourceCreateSchema.safeParse({
+      name: 'Valid FTP Source',
+      type: 'csv',
+      protocol: 'FTP',
+      connection_config: { url: 'ftp://ftp.supplier.example.com/feed.csv' }
+    });
+    assert.strictEqual(validFtp.success, true);
   });
 });

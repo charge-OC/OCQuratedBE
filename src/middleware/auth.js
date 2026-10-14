@@ -7,14 +7,24 @@ export function authenticateApi(req, res, next) {
     return next();
   }
 
-  // default development credentials from environment
-  const expectedApiKey = process.env.API_KEY || 'qurated_dev_api_key_2026';
-  const expectedUser = process.env.API_AUTH_USER || 'admin';
-  const expectedPass = process.env.API_AUTH_PASS || 'qurated_dev_password';
+  // this will make sure its safe: fail closed if server auth credentials are not configured
+  const expectedApiKey = process.env.API_KEY ? process.env.API_KEY.trim() : '';
+  const expectedUser = process.env.API_AUTH_USER ? process.env.API_AUTH_USER.trim() : '';
+  const expectedPass = process.env.API_AUTH_PASS ? process.env.API_AUTH_PASS.trim() : '';
+
+  const hasApiKey = Boolean(expectedApiKey);
+  const hasBasicAuth = Boolean(expectedUser && expectedPass);
+
+  // fail closed with 500 if server environment is missing required authentication secrets
+  if (!hasApiKey && !hasBasicAuth) {
+    return res.status(500).json({
+      error: 'Server authentication misconfiguration'
+    });
+  }
 
   // 1. check for custom header x-api-key
   const apiKeyHeader = req.headers['x-api-key'];
-  if (apiKeyHeader && apiKeyHeader === expectedApiKey) {
+  if (hasApiKey && apiKeyHeader && apiKeyHeader === expectedApiKey) {
     return next();
   }
 
@@ -24,13 +34,13 @@ export function authenticateApi(req, res, next) {
     // bearer token format
     if (authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7).trim();
-      if (token === expectedApiKey) {
+      if (hasApiKey && token === expectedApiKey) {
         return next();
       }
     }
 
     // basic auth format
-    if (authHeader.startsWith('Basic ')) {
+    if (authHeader.startsWith('Basic ') && hasBasicAuth) {
       const b64 = authHeader.slice(6).trim();
       try {
         const decoded = Buffer.from(b64, 'base64').toString('utf8');

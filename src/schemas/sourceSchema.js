@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { validateSafeUrl, isPrivateOrLocalHost } from '../utils/urlValidator.js';
 
 // checking connection details so unsafe URLs or private IPs are blocked
-const connectionConfigSchema = z.record(z.any()).default({}).superRefine((config, ctx) => {
-  if (config.url) {
+const connectionConfigSchemaBase = z.record(z.any()).superRefine((config, ctx) => {
+  if (config.url !== undefined) {
     try {
       // this will make sure its safe: blocking local files and private IPs
       validateSafeUrl(config.url);
@@ -39,12 +39,22 @@ export const sourceCreateSchema = z.object({
     .default('HTTP')
     .transform((p) => p.toUpperCase()),
   default_model_id: z.string().default('google/gemini-flash-1.5'),
-  connection_config: connectionConfigSchema,
+  connection_config: connectionConfigSchemaBase.default({}),
   dialect_config: z.record(z.any()).default({}),
   schedule_cron: z.string().nullable().optional(),
 });
 
-// schema for updating an existing source
-export const sourceUpdateSchema = sourceCreateSchema.partial().extend({
+// schema for updating an existing source without wiping fields with defaults
+export const sourceUpdateSchema = z.object({
+  name: z.string().min(1, 'Name is required').optional(),
+  type: z.enum(['csv', 'xml', 'api']).optional(),
+  protocol: z
+    .enum(['HTTP', 'FTP', 'HTTPS', 'SFTP', 'http', 'ftp', 'https', 'sftp'])
+    .transform((p) => p.toUpperCase())
+    .optional(),
+  default_model_id: z.string().optional(),
+  connection_config: connectionConfigSchemaBase.optional(),
+  dialect_config: z.record(z.any()).optional(),
+  schedule_cron: z.string().nullable().optional(),
   status: z.enum(['ACTIVE', 'PAUSED', 'ARCHIVED']).optional(),
 });

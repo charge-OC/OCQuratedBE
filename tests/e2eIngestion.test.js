@@ -5,6 +5,11 @@ import express from 'express';
 import { pool } from '../src/db/index.js';
 import sourceRouter from '../src/routes/sources.js';
 
+// this will make sure its safe: ensuring test environment has valid dummy credentials
+process.env.API_KEY = process.env.API_KEY || 'qurated_dev_api_key_2026';
+process.env.API_AUTH_USER = process.env.API_AUTH_USER || 'admin';
+process.env.API_AUTH_PASS = process.env.API_AUTH_PASS || 'qurated_dev_password';
+
 describe('End-to-End Ingestion Pipeline (Milestone B1 Full Lifecycle)', () => {
   let app;
   let server;

@@ -61,15 +61,26 @@ export function validateSafeUrl(urlString) {
   }
 
   const trimmed = urlString.trim();
+  const lower = trimmed.toLowerCase();
 
-  // strictly reject local file schemes or path traversals
+  // this will make sure its safe: strictly reject local file schemes, drive letters, and relative/absolute filesystem paths
   if (
-    trimmed.toLowerCase().startsWith('file:') ||
+    lower.startsWith('file:') ||
     trimmed.startsWith('/') ||
     trimmed.startsWith('\\') ||
-    /^[a-zA-Z]:[\\/]/.test(trimmed)
+    trimmed.startsWith('.') ||
+    /^[a-zA-Z]:/i.test(trimmed)
   ) {
     throw new Error('Local file paths and file:// schemes are strictly prohibited');
+  }
+
+  // enforcing that connection url must be a valid absolute URI with http://, https://, or ftp://
+  if (
+    !lower.startsWith('http://') &&
+    !lower.startsWith('https://') &&
+    !lower.startsWith('ftp://')
+  ) {
+    throw new Error('URL must be a valid absolute URI starting strictly with http://, https://, or ftp://');
   }
 
   let parsed;
@@ -83,6 +94,11 @@ export function validateSafeUrl(urlString) {
   const allowed = ['http:', 'https:', 'ftp:'];
   if (!allowed.includes(parsed.protocol.toLowerCase())) {
     throw new Error(`Protocol '${parsed.protocol}' is not allowed. Only http://, https://, and ftp:// are supported.`);
+  }
+
+  // ensuring a valid hostname exists
+  if (!parsed.hostname) {
+    throw new Error('URL must contain a valid hostname');
   }
 
   // reject private or internal hostnames and IP addresses
